@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Bubblism</title>
+        <meta charset="utf-8">
+        <style>
+            body{
+                background-color:#f1f1f1
+            }
+            button{
+                width:80px;
+                height:25px
+            }
+            canvas{
+                background-color:#fff
+            }
+            .container{
+                display:flex;
+            }
+            .colorsDiv{
+                display:flex;
+                flex-wrap:wrap;
+                width:400px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Bubblism</h1>
+        <div class="container">
+        <canvas width="550" height="550" id="resultCanvas"></canvas><br>
+        <div>
+            <button id="generate">Generate</button><br>
+            <button id="save">Save</button><br><br>
+            <strong>GridSize : </strong><br>
+            <input type="number" placeholder="width" min="0" max="128" step="1" value="9" id="gridWidthInput"><br>
+            <input type="number" placeholder="height" min="0" max="128" step="1" value="16" id="gridHeightInput"><br><br>
+            <strong>CellSize : </strong><br>
+            <input type="number" placeholder="pixels" min="0" max="128" step="1" value="64" id="cellSizeInput"><br><br>
+            <input type="color" id="colorPicker">
+            <button id="addColorButton">AddColor</button>
+            <div id="colorsDiv" class="colorsDiv"></div>
+        </div>
+        </div>
+        <script>
+            function addColor(color){
+                const colorSpan=document.createElement("span");
+                colorSpan.textContent=color;
+                colorSpan.style.backgroundColor=color;
+                colorSpan.style.display="inline-block";
+                colorSpan.style.borderRadius="5px";
+                colorSpan.style.fontWeight="bold";
+                colorSpan.style.width="80px";
+                colorSpan.style.textAlign="center";
+                if (Math.min(parseInt(color.substr(1,2),16),parseInt(color.substr(3,2),16),parseInt(color.substr(5,2),16))+Math.max(parseInt(color.substr(1,2),16),parseInt(color.substr(3,2),16),parseInt(color.substr(5,2),16)) >= 128){
+                    colorSpan.style.color="#000"
+                }
+                else{
+                    colorSpan.style.color="#FFF"
+                }
+                colorSpan.addEventListener("click",function(){colorSpan.remove()});
+                colorsDiv.appendChild(colorSpan);
+            }
+            class Tile{
+                constructor(connection,tileImage){
+                    this.connection=connection;
+                    this.tileImage=tileImage;
+                };
+            };
+            function makeCircleImage(colors,size){
+                let images=[]
+                for (let i=0;i<colors.length;i++){
+                    const color1=colors[i];
+                    let color2=colors[0];
+                    if (i !== colors.length-1){
+                        color2=colors[i+1]
+                    };
+                    const image=document.createElement("canvas");
+                    const ctx=image.getContext("2d");
+                    image.width=size;
+                    image.height=size;
+                    ctx.fillStyle=color1;
+                    ctx.fillRect(0,0,size,size);
+                    images.push(ctx.getImageData(0,0,image.width,image.height));
+                    let pos=[[0,size*0.5],[size,size*0.5],[size*0.5,0],[size*0.5,size]];
+                    for (let j=0;j<4;j++){
+                        ctx.fillStyle=color2;
+                        ctx.beginPath()
+                        ctx.arc(pos[j][0],pos[j][1],size*0.5,0,Math.PI*2);
+                        ctx.fill();
+                        images.push(ctx.getImageData(0,0,image.width,image.height));
+                        ctx.clearRect(0,0,size,size);
+                        ctx.fillStyle=color1;
+                        ctx.fillRect(0,0,size,size);
+                    };
+                    pos=[[0,0],[size,0],[size,size],[0,size]];
+                    for (let j=0;j<4;j++){
+                        ctx.fillStyle=color2;
+                        ctx.beginPath()
+                        ctx.arc(pos[j][0],pos[j][1],size,0,Math.PI*2);
+                        ctx.fill();
+                        images.push(ctx.getImageData(0,0,image.width,image.height));
+                        ctx.clearRect(0,0,size,size);
+                        ctx.fillStyle=color1;
+                        ctx.fillRect(0,0,size,size);
+                    };
+                };
+                return images
+            };
+            function makeTiles(colors,size){
+                images=makeCircleImage(colors,size);
+                tiles=[];
+                for (let i=0;i<colors.length;i++){
+                    const num0=i;
+                    let num1=0;
+                    if (i !== colors.length-1){
+                        num1=i+1
+                    };
+                    tiles=tiles.concat([
+                        new Tile([[num0],[num0],[num0],[num0]],images[0+9*i]),
+                        new Tile([[num1],[num0],[num0],[num0]],images[1+9*i]),
+                        new Tile([[num0],[num1],[num0],[num0]],images[2+9*i]),
+                        new Tile([[num0],[num0],[num1],[num0]],images[3+9*i]),
+                        new Tile([[num0],[num0],[num0],[num1]],images[4+9*i]),
+                        new Tile([[num1],[num0],[num1],[num0]],images[5+9*i]),
+                        new Tile([[num0],[num1],[num1],[num0]],images[6+9*i]),
+                        new Tile([[num0],[num1],[num0],[num1]],images[7+9*i]),
+                        new Tile([[num1],[num0],[num0],[num1]],images[8+9*i])
+                    ]);
+                };
+                return tiles;
+            };
+            function initializeGrid(width,height,tiles){
+                const grid=Array.from({length:height},() => Array.from({length:width},() => tiles.slice()));
+                return grid;
+            };
+            function select_min_entropy_cell(grid){
+                let minEntropy=Infinity;
+                let cell=[];
+                for (let row=0;row<grid.length;row++){
+                    for (let col=0;col<grid[0].length;col++){
+                        if (!Array.isArray(grid[row][col])){
+                            continue;
+                        };
+                        if (grid[row][col].length < minEntropy){
+                            minEntropy=grid[row][col].length;
+                            cell=[[row,col]];
+                        }
+                        else if (grid[row][col].length === minEntropy){
+                            cell.push([row,col]);
+                        };
+                    };
+                };
+                for (let i=cell.length-1;i>0;i--){
+                    const r=Math.floor(Math.random()*i);
+                    [cell[i],cell[r]]=[cell[r],cell[i]];
+                };
+                if (cell.length === 0){
+                    return null;
+                }
+                else{
+                    return cell[0];
+                };
+            };
+            function collapse_cell(grid,row,col){
+                for (let i=grid[row][col].length-1;i>0;i--){
+                    const r=Math.floor(Math.random()*i);
+                    [grid[row][col][i],grid[row][col][r]]=[grid[row][col][r],grid[row][col][i]];
+                };
+                grid[row][col]=grid[row][col][0];
+            };
+            function propagate(grid,row,col){
+                const offset=[[-1,0],[1,0],[0,-1],[0,1]];
+                let stack=[[row,col]];
+                while (stack.length > 0){
+                    const [row,col]=stack.pop();
+                    for (let i=0;i<4;i++){
+                        const [nr,nc]=[row+offset[i][0],col+offset[i][1]];
+                        if (nr < 0 || nc < 0 || nr >= grid.length || nc >= grid[0].length){
+                            continue;
+                        };
+                        if (!Array.isArray(grid[nr][nc])){
+                            continue;
+                        };
+                        let valid_cells=[];
+                        if (!Array.isArray(grid[row][col])){
+                            for (let j=grid[nr][nc].length-1;j>=0;j--){
+                                if (offset[i][0]===0 && offset[i][1]===-1 && !grid[nr][nc][j].connection[1].some(v => grid[row][col].connection[0].includes(v))){continue;};
+                                if (offset[i][0]===0 && offset[i][1]===1 && !grid[nr][nc][j].connection[0].some(v => grid[row][col].connection[1].includes(v))){continue;};
+                                if (offset[i][0]===-1 && offset[i][1]===0 && !grid[nr][nc][j].connection[3].some(v => grid[row][col].connection[2].includes(v))){continue;};
+                                if (offset[i][0]===1 && offset[i][1]===0 && !grid[nr][nc][j].connection[2].some(v => grid[row][col].connection[3].includes(v))){continue;};
+                                valid_cells.push(grid[nr][nc][j]);
+                            };
+                        }
+                        else{
+                            for (let j=grid[nr][nc].length-1;j>=0;j--){
+                                let valid=false;
+                                for (let k=0;k<grid[row][col].length;k++){
+                                    if (offset[i][0]===0 && offset[i][1]===-1 && grid[nr][nc][j].connection[1].some(v => grid[row][col][k].connection[0].includes(v))){valid=true;};
+                                    if (offset[i][0]===0 && offset[i][1]===1 && grid[nr][nc][j].connection[0].some(v => grid[row][col][k].connection[1].includes(v))){valid=true;};
+                                    if (offset[i][0]===-1 && offset[i][1]===0 && grid[nr][nc][j].connection[3].some(v => grid[row][col][k].connection[2].includes(v))){valid=true;};
+                                    if (offset[i][0]===1 && offset[i][1]===0 && grid[nr][nc][j].connection[2].some(v => grid[row][col][k].connection[3].includes(v))){valid=true;};
+                                };
+                                if (valid){valid_cells.push(grid[nr][nc][j]);};
+                            };
+                        };
+                        if (valid_cells.length !== grid[nr][nc].length){
+                            grid[nr][nc]=valid_cells;
+                            stack.push([nr,nc]);
+                        };
+                    };
+                };
+            };
+            function solve(width,height,tiles){
+                let end=true;
+
+                while (true){
+                    let grid=initializeGrid(width,height,tiles);
+                    while (true){
+                        try{
+                            const cell=select_min_entropy_cell(grid);
+                            if (cell === null){
+                                break
+                            };
+                            collapse_cell(grid,cell[0],cell[1]);
+                            propagate(grid,cell[0],cell[1])
+                        }
+                        catch(e){
+                            end=false;
+                            break
+                        };
+                    };
+                    if (end){
+                        return grid;
+                    };
+                };
+            };
+            const maxSize=550;
+            const generateButton=document.getElementById("generate");
+            const saveButton=document.getElementById("save");
+            const addColorButton=document.getElementById("addColorButton");
+            const colorsDiv=document.getElementById("colorsDiv");
+            const colorPicker=document.getElementById("colorPicker");
+            const gridWidthInput=document.getElementById("gridWidthInput");
+            const gridHeightInput=document.getElementById("gridHeightInput");
+            const cellSizeInput=document.getElementById("cellSizeInput");
+            const resultCanvas=document.getElementById("resultCanvas");
+            resultCanvas.width=maxSize;
+            resultCanvas.height=maxSize;
+
+            addColorButton.addEventListener("click",function(){addColor(colorPicker.value)});
+            generateButton.addEventListener("click",function(){
+                generateButton.disabled="disabled";
+                try{
+                    let colors=[];
+                    for (i=0;i<colorsDiv.children.length;i++){
+                        colors.push(colorsDiv.children[i].style.backgroundColor);
+                    };
+                    let tiles=makeTiles(colors,parseInt(cellSizeInput.value));
+                    const grid=solve(parseInt(gridWidthInput.value),parseInt(gridHeightInput.value),tiles);
+
+                    resultCanvas.width=parseInt(gridWidthInput.value)*parseInt(cellSizeInput.value);
+                    resultCanvas.height=parseInt(gridHeightInput.value)*parseInt(cellSizeInput.value);
+                    const scale=Math.max((resultCanvas.width/maxSize),(resultCanvas.height/maxSize));
+                    resultCanvas.style.width=`${resultCanvas.width/scale}px`
+                    resultCanvas.style.height=`${resultCanvas.height/scale}px`
+
+                    const ctx=resultCanvas.getContext("2d");
+                    for (i=0;i<parseInt(gridHeightInput.value);i++){
+                        for (j=0;j<parseInt(gridWidthInput.value);j++){
+                            ctx.putImageData(grid[i][j].tileImage,parseInt(cellSizeInput.value)*j,parseInt(cellSizeInput.value)*i);
+                        };
+                    };
+                }
+                catch{};
+                generateButton.disabled=null;
+            });
+            saveButton.addEventListener("click",function(){
+                const link=document.createElement("a");
+                link.href=resultCanvas.toDataURL("image/png");
+                link.download="Bubblism.png";
+                link.click();
+            })
+        </script>
+    </body>
+</html>
